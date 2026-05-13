@@ -1,0 +1,6 @@
+# Ma Matinale Indé — requirements.txt
+
+streamlit>=1.35.0
+feedparser>=6.0.11
+groq>=0.9.0
+gTTS>=2.5.1
