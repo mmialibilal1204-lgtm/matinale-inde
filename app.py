@@ -1,8 +1,8 @@
 """
 ╔══════════════════════════════════════════════════════╗
-║          MA MATINALE INDÉ  —  v2.9                   ║
+║          MA MATINALE INDÉ  —  v3.0                   ║
 ║  Agrégateur RSS · IA Groq · Chat avec Recherche Web  ║
-║  + Bulles (Pills) Réparées & Sources Multipliées     ║
+║  + Bulles (Pills) Design Gris Foncé & Sources Max    ║
 ╚══════════════════════════════════════════════════════╝
 """
 
@@ -364,28 +364,42 @@ def inject_css(accent: str = "#c0392b"):
         border-top: 2px solid var(--accent) !important;
     }}
 
-    /* STYLE DES BULLES (st.pills) POUR QU'ELLES S'AFFICHENT BIEN */
+    /* ── STYLE SPÉCIFIQUE DES BULLES (st.pills) POUR LE THÈME SOMBRE ── */
     [data-testid="stPills"] {{
         display: flex;
         flex-wrap: wrap;
-        gap: 0.2rem;
+        gap: 0.4rem;
+        margin-bottom: 0.5rem;
     }}
+    /* État par défaut (Gris foncé, texte gris) */
     [data-testid="stPill"] {{
-        background-color: var(--bg3) !important;
-        border: 1px solid var(--border) !important;
-        color: var(--text-muted) !important;
+        background-color: #27272a !important; 
+        border: 1px solid #3f3f46 !important; 
         border-radius: 20px !important;
-        padding: 0.2rem 0.8rem !important;
+        padding: 0.1rem 0.8rem !important;
+        transition: all 0.2s ease-in-out;
+    }}
+    [data-testid="stPill"] * {{
+        color: #a1a1aa !important; 
         font-size: 0.85rem !important;
-        transition: all 0.2s;
     }}
+    /* Au survol */
     [data-testid="stPill"]:hover {{
-        border-color: var(--text-muted) !important;
+        background-color: #3f3f46 !important;
+        border-color: #52525b !important;
     }}
-    [data-testid="stPill"][aria-selected="true"] {{
-        background-color: color-mix(in srgb, var(--accent) 15%, transparent) !important;
+    [data-testid="stPill"]:hover * {{
+        color: #e4e4e7 !important;
+    }}
+    /* État sélectionné (Couleur Accent, texte blanc) */
+    [data-testid="stPill"][aria-selected="true"], 
+    [data-testid="stPill"][data-selected="true"] {{
+        background-color: color-mix(in srgb, var(--accent) 30%, transparent) !important;
         border-color: var(--accent) !important;
-        color: var(--text) !important;
+    }}
+    [data-testid="stPill"][aria-selected="true"] *, 
+    [data-testid="stPill"][data-selected="true"] * {{
+        color: #ffffff !important;
         font-weight: 600 !important;
     }}
 
