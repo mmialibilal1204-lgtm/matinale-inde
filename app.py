@@ -1,15 +1,17 @@
 """
 ╔══════════════════════════════════════════════════════╗
-║          MA MATINALE INDÉ  —  v2.0                   ║
-║  Agrégateur RSS multi-sources · IA Groq · Audio gTTS ║
-║  Onglets thématiques · Filtres région & catégorie    ║
+║          MA MATINALE INDÉ  —  v3.2                   ║
+║  Agrégateur RSS · IA Groq · Chat avec Recherche Web  ║
+║  + Sélecteurs Régions : Vert (Sél.) / Rouge (Non)    ║
 ╚══════════════════════════════════════════════════════╝
 """
 
 import re
 import os
+import random
 import datetime
 import tempfile
+import urllib.parse
 
 import feedparser
 import streamlit as st
@@ -17,12 +19,10 @@ from groq import Groq
 from gtts import gTTS
 
 # ═══════════════════════════════════════════════════════
-#  1. CATALOGUE DES FLUX RSS
-#     Structure : { "Région" : { "Catégorie" : [ (Nom, URL) ] } }
+#  1. CATALOGUE DES FLUX RSS (Massivement Étendu)
 # ═══════════════════════════════════════════════════════
 
 RSS_CATALOG = {
-
     # ── FRANCE ──────────────────────────────────────────
     "🇫🇷 France": {
         "Général": [
@@ -31,6 +31,8 @@ RSS_CATALOG = {
             ("Libération",          "https://www.liberation.fr/arc/outboundfeeds/rss/"),
             ("France Info",         "https://www.francetvinfo.fr/france.rss"),
             ("20 Minutes",          "https://www.20minutes.fr/feeds/rss/une.xml"),
+            ("HuffPost FR",         "https://www.huffingtonpost.fr/rss.xml"),
+            ("La Croix",            "https://www.la-croix.com/RSS/UNIVERS"),
             ("L'Obs",               "https://www.nouvelobs.com/rss.xml"),
             ("France 24 FR",        "https://www.france24.com/fr/rss"),
             ("RFI France",          "https://www.rfi.fr/fr/france/rss"),
@@ -38,16 +40,15 @@ RSS_CATALOG = {
         "Politique": [
             ("L'Humanité",          "https://www.humanite.fr/feed"),
             ("Marianne",            "https://www.marianne.net/feed"),
+            ("Politis",             "https://www.politis.fr/feed/"),
             ("Le Monde Politique",  "https://www.lemonde.fr/politique/rss_full.xml"),
             ("Mediapart",           "https://www.mediapart.fr/articles/feed"),
-            ("Reporterre",          "https://reporterre.net/spip.php?page=backend"),
         ],
         "Économie": [
             ("Les Échos",           "https://www.lesechos.fr/rss/rss_une.xml"),
             ("Le Figaro Éco",       "https://www.lefigaro.fr/rss/figaro_economie.xml"),
-            ("BFM Business",        "https://bfmbusiness.bfmtv.com/rss/info/flux-rss/flux-toutes-les-actualites/"),
+            ("La Tribune",          "https://www.latribune.fr/feed.xml"),
             ("Capital",             "https://www.capital.fr/feed"),
-            ("Challenges",          "https://www.challenges.fr/feed/"),
         ],
         "Santé": [
             ("Le Monde Santé",      "https://www.lemonde.fr/sante/rss_full.xml"),
@@ -56,14 +57,14 @@ RSS_CATALOG = {
         ],
         "Culture & Société": [
             ("Télérama",            "https://www.telerama.fr/rss.xml"),
-            ("Le Monde Culture",    "https://www.lemonde.fr/culture/rss_full.xml"),
+            ("Beaux Arts",          "https://www.beauxarts.com/feed/"),
             ("Slate FR",            "https://www.slate.fr/rss"),
-            ("L'Express",           "https://www.lexpress.fr/arc/outboundfeeds/rss/"),
         ],
         "Environnement": [
             ("Reporterre",          "https://reporterre.net/spip.php?page=backend"),
             ("Le Monde Planète",    "https://www.lemonde.fr/planete/rss_full.xml"),
             ("Vert.eco",            "https://vert.eco/feed"),
+            ("We Demain",           "https://www.wedemain.fr/feed/"),
             ("Novethic",            "https://www.novethic.fr/feed"),
         ],
     },
@@ -74,9 +75,7 @@ RSS_CATALOG = {
             ("Euronews FR",         "https://fr.euronews.com/rss?level=theme&name=news"),
             ("The Guardian Europe", "https://www.theguardian.com/world/europe-news/rss"),
             ("Deutsche Welle FR",   "https://rss.dw.com/rdf/rss-fr-all"),
-            ("RTBF",                "https://rss.rtbf.be/article/rss/rtbf_info_homepage.xml"),
-            ("RTS Info",            "https://www.rts.ch/info/rss/2022.xml"),
-            ("Le Temps",            "https://www.letemps.ch/rss.xml"),
+            ("The Independent",     "https://www.independent.co.uk/news/europe/rss"),
             ("Courrier International","https://www.courrierinternational.com/feed/all/rss.xml"),
         ],
         "Politique": [
@@ -101,10 +100,9 @@ RSS_CATALOG = {
             ("BBC World",           "https://feeds.bbci.co.uk/news/world/rss.xml"),
             ("Reuters",             "https://feeds.reuters.com/reuters/topNews"),
             ("Al Jazeera EN",       "https://www.aljazeera.com/xml/rss/all.xml"),
+            ("UN News",             "https://news.un.org/feed/subscribe/fr/news/all/rss.xml"),
             ("France 24 EN",        "https://www.france24.com/en/rss"),
-            ("RFI Monde",           "https://www.rfi.fr/fr/rss"),
             ("Le Monde Diplo",      "https://www.monde-diplomatique.fr/recents.atom"),
-            ("DW World",            "https://rss.dw.com/rdf/rss-en-all"),
         ],
         "Politique": [
             ("Politico",            "https://www.politico.com/rss/politicopicks.xml"),
@@ -120,7 +118,7 @@ RSS_CATALOG = {
             ("Wired",               "https://www.wired.com/feed/rss"),
             ("The Verge",           "https://www.theverge.com/rss/index.xml"),
             ("TechCrunch",          "https://techcrunch.com/feed/"),
-            ("MIT Tech Review",     "https://www.technologyreview.com/feed/"),
+            ("Numerama",            "https://www.numerama.com/feed/"),
         ],
         "Santé": [
             ("WHO News",            "https://www.who.int/rss-feeds/news-english.xml"),
@@ -134,10 +132,9 @@ RSS_CATALOG = {
         "Général": [
             ("RFI Afrique",         "https://www.rfi.fr/fr/afrique/rss"),
             ("Jeune Afrique",       "https://www.jeuneafrique.com/feed/"),
-            ("Africa 24",           "https://www.africa24tv.com/feed/"),
+            ("Africanews",          "https://fr.africanews.com/feed/"),
             ("Le Monde Afrique",    "https://www.lemonde.fr/afrique/rss_full.xml"),
             ("Al Jazeera Africa",   "https://www.aljazeera.com/xml/rss/all.xml"),
-            ("TV5 Monde Afrique",   "https://information.tv5monde.com/rss.xml"),
             ("The Africa Report",   "https://www.theafricareport.com/feed/"),
         ],
         "Économie": [
@@ -156,8 +153,9 @@ RSS_CATALOG = {
             ("New York Times",      "https://rss.nytimes.com/services/xml/rss/nyt/World.xml"),
             ("Washington Post",     "https://feeds.washingtonpost.com/rss/world"),
             ("The Guardian US",     "https://www.theguardian.com/us-news/rss"),
+            ("The Intercept",       "https://theintercept.com/feed/?lang=en"),
             ("BBC Americas",        "https://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml"),
-            ("NPR",                 "https://feeds.npr.org/1001/rss.xml"),
+            ("CBC News Canada",     "https://www.cbc.ca/cmlink/rss-world"),
             ("RFI Amériques",       "https://www.rfi.fr/fr/ameriques/rss"),
         ],
         "Politique": [
@@ -176,9 +174,10 @@ RSS_CATALOG = {
         "Général": [
             ("BBC Asia",            "https://feeds.bbci.co.uk/news/world/asia/rss.xml"),
             ("Al Jazeera ME",       "https://www.aljazeera.com/xml/rss/all.xml"),
+            ("CNA Asia",            "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml"),
+            ("The Hindu",           "https://www.thehindu.com/news/international/feeder/default.rss"),
             ("RFI Asie",            "https://www.rfi.fr/fr/asie-pacifique/rss"),
             ("South China Morning", "https://www.scmp.com/rss/91/feed"),
-            ("DW Asia",             "https://rss.dw.com/rdf/rss-en-asia"),
             ("The Diplomat",        "https://thediplomat.com/feed/"),
         ],
         "Économie": [
@@ -192,100 +191,78 @@ RSS_CATALOG = {
     },
 }
 
-# ── ONGLETS de l'interface (thème + mapping région+catégorie) ──
+# ── ONGLETS de l'interface (thème + catégories liées) ──
 TABS_CONFIG = {
     "🗞️ À la une": {
-        "regions":    ["🇫🇷 France", "🌍 Monde"],
+        "regions_default": ["🇫🇷 France", "🌍 Monde"],
         "categories": ["Général"],
-        "prompt_hint": "Fais un tour d'horizon général de l'actualité du jour, France et Monde.",
+        "prompt_hint": "Fais un tour d'horizon général de l'actualité.",
         "color":      "#c0392b",
         "icon":       "🗞️",
     },
-    "🇫🇷 France": {
-        "regions":    ["🇫🇷 France"],
-        "categories": ["Général", "Politique", "Économie"],
-        "prompt_hint": "Concentre-toi sur l'actualité française.",
-        "color":      "#2980b9",
-        "icon":       "🇫🇷",
-    },
-    "🌍 Monde": {
-        "regions":    ["🌍 Monde", "🌎 Amériques", "🌏 Asie & M.-Orient", "🌍 Afrique"],
-        "categories": ["Général"],
-        "prompt_hint": "Dresse un panorama de l'actualité internationale.",
-        "color":      "#16a085",
-        "icon":       "🌍",
-    },
     "⚖️ Politique": {
-        "regions":    ["🇫🇷 France", "🇪🇺 Europe", "🌍 Monde"],
+        "regions_default": ["🇫🇷 France", "🇪🇺 Europe", "🌍 Monde"],
         "categories": ["Politique"],
-        "prompt_hint": "Analyse l'actualité politique française, européenne et internationale.",
+        "prompt_hint": "Analyse l'actualité politique et géopolitique.",
         "color":      "#8e44ad",
         "icon":       "⚖️",
     },
     "💶 Économie": {
-        "regions":    ["🇫🇷 France", "🇪🇺 Europe", "🌍 Monde"],
+        "regions_default": ["🇫🇷 France", "🌍 Monde"],
         "categories": ["Économie"],
         "prompt_hint": "Décrypte les grandes tendances économiques et financières du jour.",
         "color":      "#f39c12",
         "icon":       "💶",
     },
     "🌱 Environnement": {
-        "regions":    ["🇫🇷 France", "🇪🇺 Europe", "🌍 Monde"],
+        "regions_default": ["🇫🇷 France", "🌍 Monde"],
         "categories": ["Environnement"],
         "prompt_hint": "Mets en avant les enjeux environnementaux et climatiques du jour.",
         "color":      "#27ae60",
         "icon":       "🌱",
     },
-    "💊 Santé": {
-        "regions":    ["🇫🇷 France", "🌍 Monde"],
-        "categories": ["Santé"],
-        "prompt_hint": "Présente les actualités santé et science médicale importantes.",
-        "color":      "#e74c3c",
-        "icon":       "💊",
-    },
-    "💻 Tech": {
-        "regions":    ["🌍 Monde", "🌎 Amériques"],
-        "categories": ["Technologie"],
-        "prompt_hint": "Passe en revue les grandes actualités technologiques et numériques.",
+    "💻 Tech & Santé": {
+        "regions_default": ["🌍 Monde", "🇫🇷 France", "🌎 Amériques"],
+        "categories": ["Technologie", "Santé"],
+        "prompt_hint": "Passe en revue les grandes actualités technologiques, numériques et médicales.",
         "color":      "#1abc9c",
         "icon":       "💻",
-    },
-    "🌍 Afrique": {
-        "regions":    ["🌍 Afrique"],
-        "categories": ["Général", "Politique", "Économie"],
-        "prompt_hint": "Informe sur l'actualité africaine dans toute sa diversité.",
-        "color":      "#e67e22",
-        "icon":       "🌍",
     },
 }
 
 GROQ_MODEL   = "llama-3.3-70b-versatile"
 HOURS_BACK   = 24
-MAX_ARTICLES = 40   # Limite articles envoyés au LLM
-MAX_DISPLAY  = 30   # Limite articles affichés dans l'expander
+MAX_ARTICLES = 45   # Limite globale pour l'IA
+MAX_PER_FEED = 3    # DIVERSITÉ MAX : 3 articles max par journal !
+MAX_DISPLAY  = 40   # Limite affichage UI
 
-SYSTEM_PROMPT_TEMPLATE = """Tu es le rédacteur en chef d'une matinale d'information indépendante, progressive et rigoureuse.
+SYSTEM_PROMPT_TEMPLATE = """Tu es le rédacteur en chef d'une matinale d'information indépendante, progressive et experte en analyse géopolitique et sociale.
 {hint}
-À partir des articles fournis, crée un briefing de 350 mots environ, structuré en 3 parties :
+À partir des articles fournis, crée un grand journal détaillé, approfondi et structuré d'environ 800 à 1200 mots. 
 
-## 🔴 L'Essentiel
-Les faits les plus importants du moment, expliqués clairement.
+Structure ton édition avec de vrais paragraphes étoffés :
 
-## 🌐 Le Tour du Monde / Contexte
-Les développements secondaires mais significatifs, replacés dans leur contexte.
+## 🔴 À la Une (Analyse Majeure)
+Détaille les 2 ou 3 faits les plus importants du jour. Ne fais pas que résumer : explique les enjeux, le contexte, et les conséquences possibles. Rédige de longs paragraphes.
 
-## ✅ La Note Positive
-Une bonne nouvelle, une avancée, un fait encourageant.
+## 🌍 Panorama Détaillé (National & International)
+Passe en revue au moins 5 à 7 autres actualités significatives. Regroupe-les par thématiques (Politique, Économie, Société, etc.) et donne du fond à chaque information.
+
+## 🔎 Le Décryptage
+Choisis une information complexe ou technique parmi les sources fournies et explique-la en profondeur pour la rendre accessible à tous.
+
+## ✅ L'Initiative 
+Termine par 1 ou 2 nouvelles encourageantes (écologie, avancées sociales, etc.) expliquées en détail.
 
 **Règles absolues :**
-- N'invente aucun fait.
-- Reste neutre, factuel et dynamique.
-- Utilise uniquement les informations présentes dans les articles.
-- Écris en français, avec un style oral et engageant.
+- Rédige un texte long, dense et riche en informations.
+- CITE UN MAXIMUM DE JOURNAUX ET SOURCES DIFFÉRENTES parmi celles fournies pour croiser les regards.
+- N'invente AUCUN fait, utilise exclusivement les sources fournies.
+- Style journalistique professionnel, objectif mais captivant.
 """
 
 # ═══════════════════════════════════════════════════════
-#  2. CSS — DESIGN ÉDITORIAL MAGAZINE (mobile-first)
+#  2. CSS — DESIGN ÉDITORIAL MAGAZINE
 # ═══════════════════════════════════════════════════════
 
 def inject_css(accent: str = "#c0392b"):
@@ -301,7 +278,7 @@ def inject_css(accent: str = "#c0392b"):
         --bg3:         #1e1e23;
         --border:      #2a2a32;
         --text:        #e8e8ee;
-        --text-muted:  #9999aa; /* Gris plus clair pour les puces non accentuées */
+        --text-muted:  #888898;
         --radius:      10px;
     }}
 
@@ -347,6 +324,29 @@ def inject_css(accent: str = "#c0392b"):
         border: none; margin: 0.8rem auto 0;
     }}
 
+    /* --- STYLE DES BULLES (st.pills) POUR LES RÉGIONS --- */
+    /* On cible spécifiquement les bulles dans la zone principale (Main) */
+    [data-testid="stMain"] [data-testid="stPill"] {{
+        background-color: #7f1d1d !important; /* ROUGE SOMBRE (non sélectionné) */
+        border: 1px solid #b91c1c !important;
+        padding: 0.2rem 1rem !important;
+        border-radius: 20px !important;
+        transition: all 0.3s;
+    }}
+    [data-testid="stMain"] [data-testid="stPill"] * {{
+        color: white !important;
+        font-weight: 500 !important;
+        font-size: 0.85rem !important;
+    }}
+    [data-testid="stMain"] [data-testid="stPill"][aria-selected="true"] {{
+        background-color: #065f46 !important; /* VERT (sélectionné) */
+        border: 1px solid #10b981 !important;
+        transform: scale(1.05);
+    }}
+    [data-testid="stMain"] [data-testid="stPill"][aria-selected="true"] * {{
+        font-weight: 700 !important;
+    }}
+
     /* Onglets Streamlit */
     [data-testid="stTabs"] [role="tablist"] {{
         gap: 4px;
@@ -363,32 +363,12 @@ def inject_css(accent: str = "#c0392b"):
         padding: 0.45rem 0.9rem !important;
         font-size: 0.82rem !important;
         font-weight: 500 !important;
-        transition: all 0.2s !important;
-        white-space: nowrap !important;
     }}
     [data-testid="stTabs"] [role="tab"][aria-selected="true"] {{
         background: var(--bg3) !important;
         color: var(--text) !important;
         border-bottom-color: var(--bg3) !important;
         border-top: 2px solid var(--accent) !important;
-    }}
-
-    /* Filtres sidebar */
-    [data-testid="stSidebar"] label {{
-        color: var(--text) !important;
-        font-size: 0.88rem !important;
-    }}
-    [data-testid="stSidebar"] .stSelectbox > div > div {{
-        background: var(--bg3) !important;
-        border: 1px solid var(--border) !important;
-        color: var(--text) !important;
-        border-radius: var(--radius) !important;
-    }}
-    [data-testid="stSidebar"] .stMultiSelect > div > div {{
-        background: var(--bg3) !important;
-        border: 1px solid var(--border) !important;
-        color: var(--text) !important;
-        border-radius: var(--radius) !important;
     }}
 
     /* Bouton principal */
@@ -403,12 +383,7 @@ def inject_css(accent: str = "#c0392b"):
         font-size: 1rem !important;
         font-weight: 600 !important;
         letter-spacing: 0.3px !important;
-        transition: all 0.2s !important;
         box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 40%, transparent) !important;
-    }}
-    .stButton > button:hover {{
-        background: var(--accent-dark) !important;
-        transform: translateY(-1px) !important;
     }}
 
     /* Carte résumé */
@@ -427,6 +402,8 @@ def inject_css(accent: str = "#c0392b"):
         font-size: 1.2rem;
         color: var(--text);
         margin: 1.2rem 0 0.4rem;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 0.5rem;
     }}
     .summary-card h2:first-child {{ margin-top: 0; }}
 
@@ -438,21 +415,17 @@ def inject_css(accent: str = "#c0392b"):
         margin-bottom: 1rem;
     }}
     .meta-chip {{
-        background: #2a2a32; /* Fond de puce plus distinct de var(--bg3) */
+        background: var(--bg3);
         border: 1px solid var(--border);
         border-radius: 20px;
         padding: 3px 12px;
-        font-size: 0.8rem; /* Police légèrement plus grande */
-        color: var(--text); /* Utilise la couleur de texte normale pour une lisibilité maximale */
-        transition: background 0.2s; /* Transition pour l'effet de survol */
-    }}
-    .meta-chip:hover {{
-        background: #3a3a42; /* Légère couleur de survol pour les puces */
+        font-size: 0.74rem;
+        color: var(--text-muted);
     }}
     .meta-chip.accent {{
-        background: var(--accent); /* Couleur de fond d'accent saturée pour plus de peps */
-        border-color: var(--accent);
-        color: #ffffff; /* Texte blanc sur fond rouge */
+        background: color-mix(in srgb, var(--accent) 15%, transparent);
+        border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+        color: var(--accent);
         font-weight: 600;
     }}
 
@@ -468,39 +441,19 @@ def inject_css(accent: str = "#c0392b"):
         margin-right: 4px;
     }}
 
-    /* Divider */
     hr {{ border-color: var(--border) !important; }}
-
-    /* Spinner & messages */
-    [data-testid="stStatusWidget"] {{ color: var(--text) !important; }}
-    .stAlert {{ border-radius: var(--radius) !important; }}
-    [data-testid="stExpander"] {{
-        background: var(--bg2) !important;
-        border: 1px solid var(--border) !important;
-        border-radius: var(--radius) !important;
+    [data-testid="stChatMessage"] {{ background: var(--bg2) !important; border: 1px solid var(--border) !important; border-radius: var(--radius) !important; }}
+    
+    @media (min-width: 769px) {{
+        .block-container {{ max-width: 900px !important; }}
+        .masthead-title {{ font-size: 4rem; }}
+        .summary-card {{ padding: 2.5rem 3rem; font-size: 1.05rem; line-height: 1.8; }}
     }}
-    [data-testid="stExpander"] summary {{
-        color: var(--text-muted) !important;
-        font-size: 0.85rem !important;
+    @media (max-width: 768px) {{
+        .block-container {{ padding: 1rem 0.5rem !important; }}
+        .masthead-title {{ font-size: 2.2rem; }}
+        .summary-card {{ padding: 1.2rem; font-size: 0.95rem; }}
     }}
-
-    /* Download buttons */
-    [data-testid="stDownloadButton"] > button {{
-        background: var(--bg3) !important;
-        color: var(--text) !important;
-        border: 1px solid var(--border) !important;
-        border-radius: var(--radius) !important;
-        font-size: 0.85rem !important;
-        padding: 0.5rem 1rem !important;
-    }}
-
-    /* Mobile tweaks */
-    @media (max-width: 640px) {{
-        .masthead-title {{ font-size: 2rem; }}
-        .summary-card   {{ padding: 1rem; }}
-    }}
-
-    /* Hide Streamlit chrome */
     #MainMenu, footer, [data-testid="stToolbar"] {{ visibility: hidden; }}
     </style>
     """, unsafe_allow_html=True)
@@ -513,209 +466,296 @@ def inject_css(accent: str = "#c0392b"):
 def strip_html(text: str) -> str:
     return re.sub(r"<[^>]+>", " ", text).strip()
 
-@st.cache_data(ttl=1800, show_spinner=False)   # Cache 30 min
+@st.cache_data(ttl=1800, show_spinner=False)
 def fetch_articles(feed_urls: tuple) -> list[dict]:
-     cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=HOURS_BACK)
-     articles = []
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=HOURS_BACK)
+    all_articles = []
 
-     for source, url in feed_urls:
-         try:
-             feed = feedparser.parse(url)
-             for entry in feed.entries:
-                 pub = entry.get("published_parsed") or entry.get("updated_parsed")
-                 if pub:
-                     pub_dt = datetime.datetime(*pub[:6], tzinfo=datetime.timezone.utc)
-                     if pub_dt < cutoff:
-                         continue
-                 title   = strip_html(entry.get("title", "")).strip()
-                 summary = strip_html(entry.get("summary", entry.get("description", ""))).strip()
-                 if title:
-                     articles.append({
-                         "source":    source,
-                         "title":     title,
-                         "summary":   summary[:450],
-                         "link":      entry.get("link", ""),
-                         "published": entry.get("published", ""),
-                     })
-         except Exception:
-             pass
+    for source, url in feed_urls:
+        feed_articles = []
+        try:
+            feed = feedparser.parse(url)
+            for entry in feed.entries:
+                pub = entry.get("published_parsed") or entry.get("updated_parsed")
+                if pub:
+                    pub_dt = datetime.datetime(*pub[:6], tzinfo=datetime.timezone.utc)
+                    if pub_dt < cutoff:
+                        continue
+                title   = strip_html(entry.get("title", "")).strip()
+                summary = strip_html(entry.get("summary", entry.get("description", ""))).strip()
+                if title:
+                    feed_articles.append({
+                        "source":    source,
+                        "title":     title,
+                        "summary":   summary[:450],
+                        "link":      entry.get("link", "")
+                    })
+        except Exception:
+            pass
+        
+        # DIVERSITÉ MAX : on ne prend que les X premiers articles de ce journal précis
+        all_articles.extend(feed_articles[:MAX_PER_FEED])
 
-     return articles
+    # On mélange aléatoirement les articles pour une meilleure diversité
+    random.shuffle(all_articles)
+    return all_articles
 
 
-def get_feeds_for_tab(tab_cfg: dict,
-                       extra_regions: list,
-                       extra_cats: list) -> list[tuple]:
-     regions = list(set(tab_cfg["regions"] + extra_regions))
-     cats    = list(set(tab_cfg["categories"] + extra_cats))
-
-     feeds = []
-     seen  = set()
-     for region in regions:
-         if region not in RSS_CATALOG:
-             continue
-         for cat in cats:
-             if cat not in RSS_CATALOG[region]:
-                 continue
-             for name, url in RSS_CATALOG[region][cat]:
-                 if url not in seen:
-                     feeds.append((name, url))
-                     seen.add(url)
-     return feeds
+def get_feeds_for_tab(active_regions: list,
+                      tab_categories: list,
+                      extra_cats: list) -> list[tuple]:
+    cats = list(set(tab_categories + extra_cats))
+    feeds = []
+    seen  = set()
+    for region in active_regions:
+        if region not in RSS_CATALOG:
+            continue
+        for cat in cats:
+            if cat not in RSS_CATALOG[region]:
+                continue
+            for name, url in RSS_CATALOG[region][cat]:
+                if url not in seen:
+                    feeds.append((name, url))
+                    seen.add(url)
+    return feeds
 
 
 # ═══════════════════════════════════════════════════════
-#  4. LLM — GROQ
+#  4. LLM — GROQ & RECHERCHE WEB
 # ═══════════════════════════════════════════════════════
 
 def build_user_prompt(articles: list[dict]) -> str:
-     if not articles:
-         return "Aucun article disponible."
-     lines = [f"Voici {len(articles)} articles récents :\n"]
-     for i, a in enumerate(articles[:MAX_ARTICLES], 1):
-         lines.append(f"[{i}] {a['source']} — {a['title']}\n    {a['summary']}\n")
-     return "\n".join(lines)
+    if not articles:
+        return "Aucun article disponible."
+    lines = [f"Voici {len(articles)} articles récents de sources variées :\n"]
+    for i, a in enumerate(articles[:MAX_ARTICLES], 1):
+        lines.append(f"[{i}] {a['source']} — {a['title']}\n    {a['summary']}\n")
+    return "\n".join(lines)
 
 
 def generate_summary(articles: list[dict], hint: str) -> str:
-     api_key = st.secrets["GROQ_API_KEY"]
-     client  = Groq(api_key=api_key)
-     system  = SYSTEM_PROMPT_TEMPLATE.format(hint=hint)
+    api_key = st.secrets["GROQ_API_KEY"]
+    client  = Groq(api_key=api_key)
+    system  = SYSTEM_PROMPT_TEMPLATE.format(hint=hint)
 
-     response = client.chat.completions.create(
-         model=GROQ_MODEL,
-         messages=[
-             {"role": "system", "content": system},
-             {"role": "user",   "content": build_user_prompt(articles)},
-         ],
-         max_tokens=800,
-         temperature=0.45,
-     )
-     return response.choices[0].message.content.strip()
+    response = client.chat.completions.create(
+        model=GROQ_MODEL,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user",   "content": build_user_prompt(articles)},
+        ],
+        max_tokens=2500,
+        temperature=0.4,
+    )
+    return response.choices[0].message.content.strip()
+
+
+def generate_chat_response_with_search(summary: str, chat_history: list) -> str:
+    api_key = st.secrets["GROQ_API_KEY"]
+    client  = Groq(api_key=api_key)
+
+    last_question = chat_history[-1]["content"]
+
+    keyword_prompt = f"Génère une requête de recherche Google (2 à 5 mots clés) pour trouver des informations répondant à cette question: '{last_question}'. Renvoie UNIQUEMENT les mots-clés."
+    try:
+        res = client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[{"role": "user", "content": keyword_prompt}],
+            max_tokens=15,
+            temperature=0.1
+        )
+        keywords = res.choices[0].message.content.strip().replace('"', '')
+
+        safe_query = urllib.parse.quote(keywords)
+        url = f"https://news.google.com/rss/search?q={safe_query}&hl=fr&gl=FR&ceid=FR:fr"
+        feed = feedparser.parse(url)
+
+        live_news = ""
+        if feed.entries:
+            live_news = f"\n\nINFOS WEB DIRECT (Recherche: {keywords}):\n"
+            for entry in feed.entries[:5]: 
+                title = strip_html(entry.get("title", ""))
+                live_news += f"- {title}\n"
+    except Exception:
+        live_news = ""
+
+    sys_msg = f"Tu es un journaliste expert. Réponds à l'utilisateur avec ce journal ET les infos live du web si pertinentes.\n\nJOURNAL:\n{summary}{live_news}"
+
+    messages = [{"role": "system", "content": sys_msg}]
+    messages.extend(chat_history)
+
+    final_res = client.chat.completions.create(
+        model=GROQ_MODEL,
+        messages=messages,
+        max_tokens=1000,
+        temperature=0.4,
+    )
+    return final_res.choices[0].message.content.strip()
 
 
 # ═══════════════════════════════════════════════════════
-#  5. AUDIO — gTTS + tempfile
+#  5. AUDIO — gTTS
 # ═══════════════════════════════════════════════════════
 
 def generate_audio(text: str) -> bytes:
-     # Nettoyage des émojis et markdown pour TTS
-     clean = re.sub(r"[#*_`~>]", "", text)
-     clean = re.sub(r"[\U00010000-\U0010ffff]", "", clean, flags=re.UNICODE)
-     clean = re.sub(r"\s+", " ", clean).strip()
+    clean = re.sub(r"[#*_`~>]", "", text)
+    clean = re.sub(r"[\U00010000-\U0010ffff]", "", clean, flags=re.UNICODE)
+    clean = re.sub(r"\s+", " ", clean).strip()
 
-     tts = gTTS(text=clean, lang="fr", slow=False)
-     with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
-         tts.save(tmp.name)
-         path = tmp.name
-     with open(path, "rb") as f:
-         data = f.read()
-     os.unlink(path)
-     return data
+    tts = gTTS(text=clean, lang="fr", slow=False)
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+        tts.save(tmp.name)
+        path = tmp.name
+    with open(path, "rb") as f:
+        data = f.read()
+    os.unlink(path)
+    return data
 
 
 # ═══════════════════════════════════════════════════════
 #  6. RENDU D'UN ONGLET
 # ═══════════════════════════════════════════════════════
 
-def render_tab(tab_name: str, tab_cfg: dict,
-                extra_regions: list, extra_cats: list,
-                audio_enabled: bool):
-     accent = tab_cfg["color"]
-     inject_css(accent)
+def render_tab(tab_name: str, tab_cfg: dict, extra_cats: list, audio_enabled: bool):
+    accent = tab_cfg["color"]
+    inject_css(accent)
 
-     st.markdown(f"""
-     <div class="meta-bar">
-         <span class="meta-chip accent">{tab_cfg['icon']} {tab_name.split(' ', 1)[-1]}</span>
-         {"".join(f'<span class="meta-chip">{r.split(" ",1)[-1]}</span>'
-                  for r in (tab_cfg['regions'] + extra_regions)[:4])}
-     </div>
-     """, unsafe_allow_html=True)
+    # ── SÉLECTION DES RÉGIONS EN "BULLES" (PILLS) ──
+    st.markdown(f"##### 🌍 Ciblez votre veille")
+    
+    # Utilisation de st.pills (Bulles) si disponible, sinon repli sur st.multiselect
+    try:
+        selected_regions = st.pills(
+            f"Zones pour {tab_name.split(' ', 1)[-1]}",
+            options=list(RSS_CATALOG.keys()),
+            default=tab_cfg["regions_default"],
+            selection_mode="multi",
+            key=f"reg_select_{tab_name}",
+            label_visibility="collapsed"
+        )
+        if selected_regions is None:
+            selected_regions = []
+    except AttributeError:
+        selected_regions = st.multiselect(
+            f"Zones pour {tab_name.split(' ', 1)[-1]}",
+            options=list(RSS_CATALOG.keys()),
+            default=tab_cfg["regions_default"],
+            key=f"reg_select_{tab_name}",
+            label_visibility="collapsed"
+        )
 
-     feeds = get_feeds_for_tab(tab_cfg, extra_regions, extra_cats)
-     if not feeds:
-         st.warning("Aucune source disponible pour cette combinaison région/catégorie.")
-         return
+    st.markdown(f"""
+    <div class="meta-bar" style="margin-top:0.5rem">
+        <span class="meta-chip accent">{tab_cfg['icon']} {tab_name.split(' ', 1)[-1]}</span>
+        {"".join(f'<span class="meta-chip">{r.split(" ",1)[-1]}</span>' for r in selected_regions[:4])}
+    </div>
+    """, unsafe_allow_html=True)
 
-     if st.button(f"▶ Générer la matinale — {tab_name}", key=f"btn_{tab_name}"):
-         with st.spinner("📡 Lecture des flux RSS…"):
-             articles = fetch_articles(tuple(feeds))
+    feeds = get_feeds_for_tab(selected_regions, tab_cfg["categories"], extra_cats)
+    
+    if not feeds:
+        st.warning("Aucune source disponible pour ces régions et catégories.")
+        return
 
-         if not articles:
-             st.error("⚠️ Aucun article récupéré. Les flux sont peut-être indisponibles.")
-             return
+    # Mémoire de l'onglet
+    if tab_name not in st.session_state.app_data:
+        st.session_state.app_data[tab_name] = {"summary": None, "articles": [], "chat": []}
+    
+    tab_state = st.session_state.app_data[tab_name]
 
-         with st.spinner("🤖 Génération par Llama 3.3…"):
-             try:
-                 summary = generate_summary(articles, tab_cfg["prompt_hint"])
-             except Exception as e:
-                 st.error(f"Erreur Groq : {e}")
-                 return
+    if st.button(f"▶ Générer la matinale — {tab_name}", key=f"btn_{tab_name}"):
+        with st.spinner("📡 Lecture & croisement des flux RSS…"):
+            articles = fetch_articles(tuple(feeds))
 
-         audio_bytes = None
-         if audio_enabled:
-             with st.spinner("🔊 Synthèse vocale…"):
-                 try:
-                     audio_bytes = generate_audio(summary)
-                 except Exception as e:
-                     st.warning(f"Audio indisponible : {e}")
+        if not articles:
+            st.error("⚠️ Aucun article récupéré.")
+            return
 
-         st.markdown(f"""
-         <div class="meta-bar" style="margin-top:1rem">
-             <span class="meta-chip accent">✅ {len(articles)} articles</span>
-             <span class="meta-chip">🕐 24 dernières heures</span>
-             <span class="meta-chip">🤖 {GROQ_MODEL}</span>
-         </div>
-         """, unsafe_allow_html=True)
+        with st.spinner("🤖 Rédaction par Llama 3.3…"):
+            try:
+                summary = generate_summary(articles, tab_cfg["prompt_hint"])
+                tab_state["summary"] = summary
+                tab_state["articles"] = articles[:MAX_ARTICLES] # Sauvegarde de la sélection finale
+                tab_state["chat"] = [] 
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erreur Groq : {e}")
+                return
 
-         if audio_bytes:
-             st.audio(audio_bytes, format="audio/mp3")
+    # ── AFFICHAGE ──
+    if tab_state["summary"]:
+        articles = tab_state["articles"]
+        summary = tab_state["summary"]
 
-         st.markdown(
-             f'<div class="summary-card">{_md_to_html(summary)}</div>',
-             unsafe_allow_html=True,
-         )
+        unique_sources = len(set(a["source"] for a in articles))
 
-         col1, col2 = st.columns(2)
-         with col1:
-             if audio_bytes:
-                 st.download_button("⬇️ MP3", audio_bytes,
-                                    file_name="matinale.mp3", mime="audio/mpeg",
-                                    use_container_width=True, key=f"dl_mp3_{tab_name}")
-         with col2:
-             st.download_button("⬇️ Texte", summary,
-                                file_name="matinale.txt", mime="text/plain",
-                                use_container_width=True, key=f"dl_txt_{tab_name}")
+        st.markdown(f"""
+        <div class="meta-bar" style="margin-top:1rem">
+            <span class="meta-chip accent">✅ {len(articles)} articles utilisés</span>
+            <span class="meta-chip">📰 {unique_sources} journaux différents</span>
+            <span class="meta-chip">🤖 {GROQ_MODEL}</span>
+        </div>
+        """, unsafe_allow_html=True)
 
-         with st.expander(f"📋 {len(articles)} articles collectés — cliquer pour voir"):
-             for art in articles[:MAX_DISPLAY]:
-                 link_md = f"[{art['title']}]({art['link']})" if art["link"] else art["title"]
-                 st.markdown(
-                     f"<span class='src-badge'>{art['source']}</span> {link_md}",
-                     unsafe_allow_html=True,
-                 )
+        if audio_enabled:
+            with st.spinner("🔊 Synthèse vocale…"):
+                try:
+                    audio_bytes = generate_audio(summary)
+                    st.audio(audio_bytes, format="audio/mp3")
+                except Exception as e:
+                    st.warning(f"Audio indisponible : {e}")
 
-     else:
-         src_names = [s for s, _ in feeds[:8]]
-         st.markdown(f"""
-         <div class="summary-card" style="text-align:center; color:var(--text-muted); padding:2.5rem 1rem">
-             <div style="font-size:2.5rem; margin-bottom:0.5rem">{tab_cfg['icon']}</div>
-             <div style="font-family:'DM Serif Display',serif; font-size:1.1rem; color:var(--text); margin-bottom:0.5rem">
-                 Prêt à générer
-             </div>
-             <div style="font-size:0.82rem">
-                 {len(feeds)} sources actives ·
-                 {", ".join(src_names[:5])}{"…" if len(src_names) > 5 else ""}
-             </div>
-         </div>
-         """, unsafe_allow_html=True)
+        st.markdown(f'<div class="summary-card">{_md_to_html(summary)}</div>', unsafe_allow_html=True)
+
+        with st.expander(f"📋 {unique_sources} Sources et {len(articles)} articles croisés — cliquer pour voir"):
+            for art in articles[:MAX_DISPLAY]:
+                link_md = f"[{art['title']}]({art['link']})" if art["link"] else art["title"]
+                st.markdown(f"<span class='src-badge'>{art['source']}</span> {link_md}", unsafe_allow_html=True)
+
+        # ── ZONE DE DISCUSSION (CHAT & RECHERCHE) ──
+        st.markdown("<hr style='margin: 3rem 0 1.5rem;' />", unsafe_allow_html=True)
+        st.markdown(f"### 💬 En savoir plus")
+        st.caption("Posez une question sur l'actualité. L'IA ira chercher en direct sur le web pour compléter sa réponse.")
+
+        for msg in tab_state["chat"]:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+
+        if prompt := st.chat_input("Ex: Quels sont les détails de cette nouvelle loi ?", key=f"chat_{tab_name}"):
+            tab_state["chat"].append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
+
+            with st.chat_message("assistant"):
+                with st.spinner("Recherche d'informations récentes sur le web..."):
+                    response = generate_chat_response_with_search(summary, tab_state["chat"])
+                    st.markdown(response)
+                    tab_state["chat"].append({"role": "assistant", "content": response})
+
+    else:
+        src_names = list(set([s for s, _ in feeds]))
+        st.markdown(f"""
+        <div class="summary-card" style="text-align:center; color:var(--text-muted); padding:2.5rem 1rem">
+            <div style="font-size:2.5rem; margin-bottom:0.5rem">{tab_cfg['icon']}</div>
+            <div style="font-family:'DM Serif Display',serif; font-size:1.1rem; color:var(--text); margin-bottom:0.5rem">
+                Prêt à générer
+            </div>
+            <div style="font-size:0.82rem">
+                Analyse prévue sur <strong>{len(feeds)} flux RSS</strong> provenant de <strong>{len(src_names)} médias</strong> distincts.<br>
+                <span style="opacity: 0.7">Ex: {", ".join(src_names[:6])}{"…" if len(src_names) > 6 else ""}</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 def _md_to_html(text: str) -> str:
-     text = re.sub(r"^## (.+)$", r"<h2>\1</h2>", text, flags=re.MULTILINE)
-     text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
-     text = text.replace("\n", "<br>")
-     return text
+    text = re.sub(r"^## (.+)$", r"<h2>\1</h2>", text, flags=re.MULTILINE)
+    text = re.sub(r"^### (.+)$", r"<h3>\1</h3>", text, flags=re.MULTILINE)
+    text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
+    text = re.sub(r"\*(.+?)\*", r"<em>\1</em>", text)
+    text = text.replace("\n\n", "<br><br>")
+    text = re.sub(r"^- (.+)$", r"• \1<br>", text, flags=re.MULTILINE)
+    return text
 
 
 # ═══════════════════════════════════════════════════════
@@ -723,98 +763,104 @@ def _md_to_html(text: str) -> str:
 # ═══════════════════════════════════════════════════════
 
 def main():
-     st.set_page_config(
-         page_title="Ma Matinale Indé",
-         page_icon="📻",
-         layout="centered",
-         initial_sidebar_state="expanded",
-     )
-     inject_css()
+    st.set_page_config(
+        page_title="Ma Matinale Indé",
+        page_icon="📻",
+        layout="centered",
+        initial_sidebar_state="expanded",
+    )
+    
+    if "app_data" not in st.session_state:
+        st.session_state.app_data = {}
 
-     today = datetime.date.today()
-     jours = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
-     mois  = ["janvier","février","mars","avril","mai","juin",
-               "juillet","août","septembre","octobre","novembre","décembre"]
-     date_str = f"{jours[today.weekday()]} {today.day} {mois[today.month-1]} {today.year}".upper()
+    inject_css()
 
-     st.markdown(f"""
-     <div class="masthead">
-         <h1 class="masthead-title">Ma Matinale <span>Indé</span></h1>
-         <div class="masthead-date">{date_str}</div>
-         <hr class="masthead-rule">
-     </div>
-     """, unsafe_allow_html=True)
+    # ── MASTHEAD ──────────────────────────────────────
+    today = datetime.date.today()
+    jours = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
+    mois  = ["janvier","février","mars","avril","mai","juin",
+              "juillet","août","septembre","octobre","novembre","décembre"]
+    date_str = f"{jours[today.weekday()]} {today.day} {mois[today.month-1]} {today.year}".upper()
 
-     with st.sidebar:
-         st.markdown("""
-         <div style="font-family:'DM Serif Display',serif; font-size:1.3rem;
-                     color:var(--text); padding:0.5rem 0 1rem; border-bottom:1px solid var(--border);
-                     margin-bottom:1rem">
-             🎛️ Filtres
-         </div>
-         """, unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="masthead">
+        <h1 class="masthead-title">Ma Matinale <span>Indé</span></h1>
+        <div class="masthead-date">{date_str}</div>
+        <hr class="masthead-rule">
+    </div>
+    """, unsafe_allow_html=True)
 
-         all_regions = list(RSS_CATALOG.keys())
-         extra_regions = st.multiselect(
-             "Régions supplémentaires",
-             options=all_regions,
-             default=[],
-             help="Ajoute des régions en plus de celles de l'onglet actif",
-         )
+    # ── SIDEBAR — FILTRES ─────────────────────────────
+    with st.sidebar:
+        st.markdown("""
+        <div style="font-family:'DM Serif Display',serif; font-size:1.3rem;
+                    color:var(--text); padding:0.5rem 0 1rem; border-bottom:1px solid var(--border);
+                    margin-bottom:1rem">
+            🎛️ Paramètres
+        </div>
+        """, unsafe_allow_html=True)
 
-         all_cats = sorted({
-             cat
-             for region in RSS_CATALOG.values()
-             for cat in region
-         })
-         extra_cats = st.multiselect(
-             "Catégories supplémentaires",
-             options=all_cats,
-             default=[],
-             help="Ajoute des catégories en plus de celles de l'onglet actif",
-         )
+        all_cats = sorted({cat for region in RSS_CATALOG.values() for cat in region})
+        
+        # Utilisation de st.pills (Bulles) si disponible pour la Sidebar aussi
+        try:
+            extra_cats = st.pills(
+                "Thématiques globales supplémentaires",
+                options=all_cats,
+                default=[],
+                selection_mode="multi"
+            )
+            if extra_cats is None: extra_cats = []
+        except AttributeError:
+            extra_cats = st.multiselect(
+                "Thématiques globales supplémentaires",
+                options=all_cats,
+                default=[],
+                help="S'ajoutera à toutes vos éditions",
+            )
 
-         st.markdown("---")
-         audio_enabled = st.toggle("🔊 Activer l'audio (gTTS)", value=True)
+        st.markdown("---")
+        audio_enabled = st.toggle("🔊 Activer l'audio (gTTS)", value=True)
+        if st.button("🗑️ Vider l'historique"):
+            st.session_state.app_data = {}
+            st.rerun()
 
-         st.markdown("---")
-         total_feeds = sum(
-             len(urls)
-             for region in RSS_CATALOG.values()
-             for urls in region.values()
-         )
-         st.markdown(f"""
-         <div style="font-size:0.78rem; color:var(--text-muted); line-height:1.8">
-             <strong style="color:var(--text)">{total_feeds}</strong> sources indexées<br>
-             <strong style="color:var(--text)">{len(RSS_CATALOG)}</strong> régions du monde<br>
-             <strong style="color:var(--text)">{len(all_cats)}</strong> catégories<br>
-             <strong style="color:var(--text)">{HOURS_BACK}h</strong> de fenêtre temporelle<br>
-             🤖 <strong style="color:var(--text)">{GROQ_MODEL}</strong>
-         </div>
-         """, unsafe_allow_html=True)
+        st.markdown("---")
+        total_feeds = sum(len(urls) for region in RSS_CATALOG.values() for urls in region.values())
+        unique_media = len(set([name for region in RSS_CATALOG.values() for cat in region.values() for name, url in cat]))
+        
+        st.markdown(f"""
+        <div style="font-size:0.78rem; color:var(--text-muted); line-height:1.8">
+            <strong style="color:var(--text)">{unique_media}</strong> médias indépendants et majeurs<br>
+            <strong style="color:var(--text)">{total_feeds}</strong> flux RSS scannés<br>
+            <strong style="color:var(--text)">{HOURS_BACK}h</strong> de fenêtre temporelle<br>
+            🤖 <strong style="color:var(--text)">{GROQ_MODEL}</strong>
+        </div>
+        """, unsafe_allow_html=True)
 
-     tab_labels = list(TABS_CONFIG.keys())
-     tabs = st.tabs(tab_labels)
+    # ── ONGLETS ───────────────────────────────────────
+    tab_labels = list(TABS_CONFIG.keys())
+    tabs = st.tabs(tab_labels)
 
-     for tab_widget, tab_name in zip(tabs, tab_labels):
-         with tab_widget:
-             render_tab(
-                 tab_name    = tab_name,
-                 tab_cfg     = TABS_CONFIG[tab_name],
-                 extra_regions = extra_regions,
-                 extra_cats    = extra_cats,
-                 audio_enabled = audio_enabled,
-             )
+    for tab_widget, tab_name in zip(tabs, tab_labels):
+        with tab_widget:
+            render_tab(
+                tab_name    = tab_name,
+                tab_cfg     = TABS_CONFIG[tab_name],
+                extra_cats    = extra_cats,
+                audio_enabled = audio_enabled,
+            )
 
-     st.markdown("""
-     <div style="text-align:center; margin-top:3rem; padding-top:1rem;
-                 border-top:1px solid var(--border); font-size:0.75rem;
-                 color:var(--text-muted); line-height:2">
-         <strong style="color:var(--text)">Ma Matinale Indé</strong> · Open-source · Aucune pub<br>
-         IA : Groq / Llama 3.3 · Voix : Google TTS · Sources : presse indépendante mondiale
-     </div>
-     """, unsafe_allow_html=True)
+    # ── PIED DE PAGE ──────────────────────────────────
+    st.markdown("""
+    <div style="text-align:center; margin-top:3rem; padding-top:1rem;
+                border-top:1px solid var(--border); font-size:0.75rem;
+                color:var(--text-muted); line-height:2">
+        <strong style="color:var(--text)">Ma Matinale Indé</strong> · Open-source · Diversité garantie<br>
+        IA : Groq / Llama 3.3 · Recherche Web Live · Sources : presse mondiale
+    </div>
+    """, unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
-     main()
+    main()
