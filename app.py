@@ -26,7 +26,7 @@ RSS_FEEDS = {
 }
 
 HOURS_BACK = 24
-GROQ_MODEL = "llama3-70b-8192"
+GROQ_MODEL = "llama-3.3-70b-versatile"
 
 SYSTEM_PROMPT = (
     "Tu es le rédacteur en chef d'une matinale d'information indépendante. "
