@@ -1,8 +1,8 @@
 """
 ╔══════════════════════════════════════════════════════╗
-║          MA MATINALE INDÉ  —  v2.7                   ║
+║          MA MATINALE INDÉ  —  v2.8                   ║
 ║  Agrégateur RSS · IA Groq · Chat avec Recherche Web  ║
-║  + Sélecteur de Régions par Thème & Sources Étendues ║
+║  + Sélecteurs en "Bulles" (Pills) & Sources Étendues ║
 ╚══════════════════════════════════════════════════════╝
 """
 
@@ -348,14 +348,6 @@ def inject_css(accent: str = "#c0392b"):
         border-top: 2px solid var(--accent) !important;
     }}
 
-    /* Filtres et MultiSelect UI */
-    .stMultiSelect > div > div {{
-        background: var(--bg3) !important;
-        border: 1px solid var(--border) !important;
-        color: var(--text) !important;
-        border-radius: var(--radius) !important;
-    }}
-
     /* Bouton principal */
     .stButton > button {{
         width: 100% !important;
@@ -445,7 +437,7 @@ def inject_css(accent: str = "#c0392b"):
 
 
 # ═══════════════════════════════════════════════════════
-#  3. PARSING RSS (Modifié pour la diversité des sources)
+#  3. PARSING RSS
 # ═══════════════════════════════════════════════════════
 
 def strip_html(text: str) -> str:
@@ -478,11 +470,10 @@ def fetch_articles(feed_urls: tuple) -> list[dict]:
         except Exception:
             pass
         
-        # ASTUCE DIVERSITÉ : On ne garde que les X premiers articles de ce journal précis
-        # Cela force l'IA à piocher dans de nombreux journaux différents plutôt qu'un seul
+        # DIVERSITÉ MAX : on ne prend que les X premiers articles de ce journal précis
         all_articles.extend(feed_articles[:MAX_PER_FEED])
 
-    # On mélange aléatoirement les articles pour ne pas privilégier le premier flux lu
+    # On mélange aléatoirement les articles pour une meilleure diversité
     random.shuffle(all_articles)
     return all_articles
 
@@ -599,21 +590,36 @@ def generate_audio(text: str) -> bytes:
 
 
 # ═══════════════════════════════════════════════════════
-#  6. RENDU D'UN ONGLET (Avec Sélecteur de Région)
+#  6. RENDU D'UN ONGLET
 # ═══════════════════════════════════════════════════════
 
 def render_tab(tab_name: str, tab_cfg: dict, extra_cats: list, audio_enabled: bool):
     accent = tab_cfg["color"]
     inject_css(accent)
 
-    # ── SÉLECTION DES RÉGIONS SPÉCIFIQUE À CE THÈME ──
+    # ── SÉLECTION DES RÉGIONS EN "BULLES" (PILLS) ──
     st.markdown(f"##### 🌍 Ciblez votre veille")
-    selected_regions = st.multiselect(
-        f"Quelles zones géographiques analyser pour la rubrique {tab_name.split(' ', 1)[-1]} ?",
-        options=list(RSS_CATALOG.keys()),
-        default=tab_cfg["regions_default"],
-        key=f"reg_select_{tab_name}"
-    )
+    
+    # Utilisation de st.pills (Bulles) si disponible, sinon repli sur st.multiselect
+    try:
+        selected_regions = st.pills(
+            f"Zones pour {tab_name.split(' ', 1)[-1]}",
+            options=list(RSS_CATALOG.keys()),
+            default=tab_cfg["regions_default"],
+            selection_mode="multi",
+            key=f"reg_select_{tab_name}",
+            label_visibility="collapsed"
+        )
+        if selected_regions is None:
+            selected_regions = []
+    except AttributeError:
+        selected_regions = st.multiselect(
+            f"Zones pour {tab_name.split(' ', 1)[-1]} (Mettez à jour Streamlit >= 1.40 pour avoir les bulles)",
+            options=list(RSS_CATALOG.keys()),
+            default=tab_cfg["regions_default"],
+            key=f"reg_select_{tab_name}",
+            label_visibility="collapsed"
+        )
 
     st.markdown(f"""
     <div class="meta-bar" style="margin-top:0.5rem">
@@ -646,7 +652,7 @@ def render_tab(tab_name: str, tab_cfg: dict, extra_cats: list, audio_enabled: bo
             try:
                 summary = generate_summary(articles, tab_cfg["prompt_hint"])
                 tab_state["summary"] = summary
-                tab_state["articles"] = articles[:MAX_ARTICLES] # On ne sauvegarde que ceux envoyés
+                tab_state["articles"] = articles[:MAX_ARTICLES] # Sauvegarde de la sélection finale
                 tab_state["chat"] = [] 
                 st.rerun()
             except Exception as e:
@@ -772,12 +778,23 @@ def main():
         """, unsafe_allow_html=True)
 
         all_cats = sorted({cat for region in RSS_CATALOG.values() for cat in region})
-        extra_cats = st.multiselect(
-            "Thématiques globales supplémentaires",
-            options=all_cats,
-            default=[],
-            help="S'ajoutera à toutes vos éditions",
-        )
+        
+        # Utilisation de st.pills (Bulles) si disponible pour la Sidebar aussi
+        try:
+            extra_cats = st.pills(
+                "Thématiques globales supplémentaires",
+                options=all_cats,
+                default=[],
+                selection_mode="multi"
+            )
+            if extra_cats is None: extra_cats = []
+        except AttributeError:
+            extra_cats = st.multiselect(
+                "Thématiques globales supplémentaires",
+                options=all_cats,
+                default=[],
+                help="S'ajoutera à toutes vos éditions",
+            )
 
         st.markdown("---")
         audio_enabled = st.toggle("🔊 Activer l'audio (gTTS)", value=True)
