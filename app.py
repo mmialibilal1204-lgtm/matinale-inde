@@ -1,8 +1,8 @@
 """
 ╔══════════════════════════════════════════════════════╗
-║          MA MATINALE INDÉ  —  v2.5                   ║
+║          MA MATINALE INDÉ  —  v2.6                   ║
 ║  Agrégateur RSS multi-sources · IA Groq · Audio gTTS ║
-║  Onglets thématiques · Filtres région & catégorie    ║
+║  Onglets thématiques · Chat avec RECHERCHE WEB LIVE  ║
 ╚══════════════════════════════════════════════════════╝
 """
 
@@ -10,6 +10,7 @@ import re
 import os
 import datetime
 import tempfile
+import urllib.parse  # Ajouté pour encoder la recherche web
 
 import feedparser
 import streamlit as st
@@ -261,7 +262,7 @@ TABS_CONFIG = {
 
 GROQ_MODEL   = "llama-3.3-70b-versatile"
 HOURS_BACK   = 24
-MAX_ARTICLES = 45   # Réduit à 45 pour éviter l'erreur API Groq
+MAX_ARTICLES = 45   # Limite optimisée pour ne pas dépasser le quota API Groq
 MAX_DISPLAY  = 40   # Limite articles affichés dans l'expander
 
 SYSTEM_PROMPT_TEMPLATE = """Tu es le rédacteur en chef d'une matinale d'information indépendante, progressive et experte en analyse géopolitique et sociale.
@@ -471,8 +472,8 @@ def inject_css(accent: str = "#c0392b"):
 
     /* ── Divider ────────────────────────────────── */
     hr {{ border-color: var(--border) !important; }}
-
-    /* ── Chat Messages ──────────────────────────── */
+    
+    /* ── Chat styling ───────────────────────────── */
     [data-testid="stChatMessage"] {{
         background: var(--bg2) !important;
         border: 1px solid var(--border) !important;
@@ -626,7 +627,7 @@ def get_feeds_for_tab(tab_cfg: dict,
 
 
 # ═══════════════════════════════════════════════════════
-#  4. LLM — GROQ
+#  4. LLM — GROQ & RECHERCHE WEB
 # ═══════════════════════════════════════════════════════
 
 def build_user_prompt(articles: list[dict]) -> str:
@@ -654,22 +655,57 @@ def generate_summary(articles: list[dict], hint: str) -> str:
     )
     return response.choices[0].message.content.strip()
 
-def generate_chat_response(summary: str, chat_history: list) -> str:
+
+def generate_chat_response_with_search(summary: str, chat_history: list) -> str:
+    """
+    Cette fonction fait 3 choses :
+    1. Demande à l'IA d'extraire les mots clés de la question.
+    2. Cherche ces mots clés silencieusement sur Google News RSS.
+    3. Envoie le tout à l'IA pour générer une réponse ultra-pertinente.
+    """
     api_key = st.secrets["GROQ_API_KEY"]
     client  = Groq(api_key=api_key)
-    
-    messages = [
-        {"role": "system", "content": f"Tu es un assistant journaliste expert. Réponds de façon détaillée aux questions de l'utilisateur en utilisant UNIQUEMENT ce journal comme contexte : {summary}"}
-    ]
+
+    last_question = chat_history[-1]["content"]
+
+    # 1. Génération de mots-clés pour la recherche
+    keyword_prompt = f"Génère une requête de recherche Google (2 à 5 mots clés) pour trouver des informations répondant à cette question: '{last_question}'. Renvoie UNIQUEMENT les mots-clés, sans ponctuation."
+    try:
+        res = client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[{"role": "user", "content": keyword_prompt}],
+            max_tokens=15,
+            temperature=0.1
+        )
+        keywords = res.choices[0].message.content.strip().replace('"', '')
+
+        # 2. Recherche Web via Google News RSS
+        safe_query = urllib.parse.quote(keywords)
+        url = f"https://news.google.com/rss/search?q={safe_query}&hl=fr&gl=FR&ceid=FR:fr"
+        feed = feedparser.parse(url)
+
+        live_news = ""
+        if feed.entries:
+            live_news = f"\n\nINFORMATIONS RÉCENTES TROUVÉES SUR LE WEB (Recherche: {keywords}):\n"
+            for entry in feed.entries[:5]: # On prend les 5 meilleurs résultats
+                title = strip_html(entry.get("title", ""))
+                live_news += f"- {title}\n"
+    except Exception:
+        live_news = "" # En cas de bug réseau, on continue sans crasher
+
+    # 3. Réponse finale avec le contexte enrichi
+    sys_msg = f"Tu es un journaliste expert et clair. Pour répondre à la question de l'utilisateur, utilise le journal de base fourni ci-dessous, ET les informations en direct du web si elles sont pertinentes.\n\nJOURNAL DE BASE:\n{summary}{live_news}"
+
+    messages = [{"role": "system", "content": sys_msg}]
     messages.extend(chat_history)
 
-    response = client.chat.completions.create(
+    final_res = client.chat.completions.create(
         model=GROQ_MODEL,
         messages=messages,
         max_tokens=1000,
         temperature=0.4,
     )
-    return response.choices[0].message.content.strip()
+    return final_res.choices[0].message.content.strip()
 
 
 # ═══════════════════════════════════════════════════════
@@ -717,10 +753,10 @@ def render_tab(tab_name: str, tab_cfg: dict,
         st.warning("Aucune source disponible pour cette combinaison région/catégorie.")
         return
 
-    # Gestion de l'état (mémoire) pour cet onglet
+    # Gestion de la mémoire pour cet onglet spécifique
     if tab_name not in st.session_state.app_data:
         st.session_state.app_data[tab_name] = {"summary": None, "articles": [], "chat": []}
-
+    
     tab_state = st.session_state.app_data[tab_name]
 
     if st.button(f"▶ Générer la matinale — {tab_name}", key=f"btn_{tab_name}"):
@@ -736,24 +772,22 @@ def render_tab(tab_name: str, tab_cfg: dict,
         with st.spinner("🤖 Génération par Llama 3.3…"):
             try:
                 summary = generate_summary(articles, tab_cfg["prompt_hint"])
-                # Sauvegarde en mémoire
                 tab_state["summary"] = summary
                 tab_state["articles"] = articles
-                tab_state["chat"] = [] # On vide le chat car nouveau journal
-                st.rerun() # Recharge la page proprement
+                tab_state["chat"] = [] # On vide le chat à chaque nouvelle génération
+                st.rerun()
             except Exception as e:
                 st.error(f"Erreur Groq : {e}")
                 return
 
-    # Si on a un résumé en mémoire pour cet onglet
+    # ── AFFICHAGE SI LE RÉSUMÉ EST EN MÉMOIRE ──
     if tab_state["summary"]:
         articles = tab_state["articles"]
         summary = tab_state["summary"]
 
-        # ── Affichage ─────────────────────────────
         st.markdown(f"""
         <div class="meta-bar" style="margin-top:1rem">
-            <span class="meta-chip accent">✅ {len(articles)} articles scannés</span>
+            <span class="meta-chip accent">✅ {len(articles)} articles</span>
             <span class="meta-chip">🕐 24 dernières heures</span>
             <span class="meta-chip">🤖 {GROQ_MODEL}</span>
         </div>
@@ -774,7 +808,7 @@ def render_tab(tab_name: str, tab_cfg: dict,
         )
 
         # Sources détaillées (repliable)
-        with st.expander(f"📋 Sources collectées — cliquer pour voir"):
+        with st.expander(f"📋 {len(articles)} articles collectés — cliquer pour voir"):
             for art in articles[:MAX_DISPLAY]:
                 link_md = f"[{art['title']}]({art['link']})" if art["link"] else art["title"]
                 st.markdown(
@@ -782,30 +816,29 @@ def render_tab(tab_name: str, tab_cfg: dict,
                     unsafe_allow_html=True,
                 )
 
-        # ── ZONE DE DISCUSSION (CHAT) ─────────────────
-        st.markdown("<hr style='margin: 3rem 0 1rem;' />", unsafe_allow_html=True)
-        st.markdown(f"### 💬 Approfondir un sujet")
-        st.caption(f"Posez une question à l'IA pour avoir plus de détails sur une actualité mentionnée ci-dessus.")
+        # ── ZONE DE DISCUSSION (CHAT & RECHERCHE) ──
+        st.markdown("<hr style='margin: 3rem 0 1.5rem;' />", unsafe_allow_html=True)
+        st.markdown(f"### 💬 En savoir plus")
+        st.caption("Posez une question sur l'actualité. L'IA ira chercher en direct sur le web pour compléter sa réponse.")
 
-        # Affichage de l'historique
         for msg in tab_state["chat"]:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
 
-        # Input Utilisateur
-        if prompt := st.chat_input("Ex: Peux-tu détailler le sujet sur l'écologie ?", key=f"chat_{tab_name}"):
+        if prompt := st.chat_input("Ex: Quels sont les détails de cette nouvelle loi ?", key=f"chat_{tab_name}"):
             tab_state["chat"].append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
 
             with st.chat_message("assistant"):
-                with st.spinner("Recherche d'informations..."):
-                    response = generate_chat_response(summary, tab_state["chat"])
+                with st.spinner("Recherche d'informations récentes sur le web..."):
+                    # On appelle la nouvelle fonction qui intègre la recherche Google News
+                    response = generate_chat_response_with_search(summary, tab_state["chat"])
                     st.markdown(response)
                     tab_state["chat"].append({"role": "assistant", "content": response})
 
     else:
-        # État vide (avant de cliquer sur Générer)
+        # État vide
         src_names = [s for s, _ in feeds[:8]]
         st.markdown(f"""
         <div class="summary-card" style="text-align:center; color:var(--text-muted); padding:2.5rem 1rem">
@@ -850,7 +883,6 @@ def main():
         initial_sidebar_state="expanded",
     )
     
-    # Initialisation de la mémoire globale
     if "app_data" not in st.session_state:
         st.session_state.app_data = {}
 
@@ -903,6 +935,9 @@ def main():
 
         st.markdown("---")
         audio_enabled = st.toggle("🔊 Activer l'audio (gTTS)", value=True)
+        if st.button("🗑️ Vider l'historique"):
+            st.session_state.app_data = {}
+            st.rerun()
 
         st.markdown("---")
         # Compteur de sources
