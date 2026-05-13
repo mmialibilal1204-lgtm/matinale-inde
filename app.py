@@ -1,7 +1,8 @@
 """
 ╔══════════════════════════════════════════════════════╗
-║          MA MATINALE INDÉ  —  v4.0                   ║
-║  Design Magazine · Catalogue Complet · Chat · Audio  ║
+║          MA MATINALE INDÉ  —  v3.5                   ║
+║  Agrégateur RSS · IA Groq · Audio · Chat Interactif  ║
+║  Design Magazine v2.0 Original (Restauré)            ║
 ╚══════════════════════════════════════════════════════╝
 """
 
@@ -16,117 +17,97 @@ from groq import Groq
 from gtts import gTTS
 
 # ═══════════════════════════════════════════════════════
-#  1. CATALOGUE COMPLET (Restauré de la v2)
+#  1. CATALOGUE DES FLUX RSS
 # ═══════════════════════════════════════════════════════
 
 RSS_CATALOG = {
     "🇫🇷 France": {
         "Général": [
-            ("Le Monde", "https://www.lemonde.fr/rss/une.xml"),
-            ("Le Figaro", "https://www.lefigaro.fr/rss/figaro_actualites.xml"),
-            ("Libération", "https://www.liberation.fr/arc/outboundfeeds/rss/"),
-            ("France Info", "https://www.francetvinfo.fr/france.rss"),
-            ("L'Obs", "https://www.nouvelobs.com/rss.xml"),
+            ("Le Monde",            "https://www.lemonde.fr/rss/une.xml"),
+            ("Le Figaro",           "https://www.lefigaro.fr/rss/figaro_actualites.xml"),
+            ("Libération",          "https://www.liberation.fr/arc/outboundfeeds/rss/"),
+            ("France Info",         "https://www.francetvinfo.fr/france.rss"),
+            ("L'Obs",               "https://www.nouvelobs.com/rss.xml"),
         ],
         "Politique": [
-            ("L'Humanité", "https://www.humanite.fr/feed"),
-            ("Marianne", "https://www.marianne.net/feed"),
-            ("Mediapart", "https://www.mediapart.fr/articles/feed"),
-            ("Reporterre", "https://reporterre.net/spip.php?page=backend"),
+            ("L'Humanité",          "https://www.humanite.fr/feed"),
+            ("Marianne",            "https://www.marianne.net/feed"),
+            ("Mediapart",           "https://www.mediapart.fr/articles/feed"),
+            ("Reporterre",          "https://reporterre.net/spip.php?page=backend"),
         ],
         "Économie": [
-            ("Les Échos", "https://www.lesechos.fr/rss/rss_une.xml"),
-            ("Capital", "https://www.capital.fr/feed"),
+            ("Les Échos",           "https://www.lesechos.fr/rss/rss_une.xml"),
+            ("Capital",             "https://www.capital.fr/feed"),
         ],
         "Environnement": [
-            ("Reporterre", "https://reporterre.net/spip.php?page=backend"),
-            ("Vert.eco", "https://vert.eco/feed"),
+            ("Reporterre",          "https://reporterre.net/spip.php?page=backend"),
+            ("Vert.eco",            "https://vert.eco/feed"),
+        ],
+    },
+    "🌍 Monde": {
+        "Général": [
+            ("The Guardian World",  "https://www.theguardian.com/world/rss"),
+            ("BBC World",           "https://feeds.bbci.co.uk/news/world/rss.xml"),
+            ("Le Monde Diplo",      "https://www.monde-diplomatique.fr/recents.atom"),
+            ("Courrier International","https://www.courrierinternational.com/feed/all/rss.xml"),
         ],
     },
     "🇪🇺 Europe": {
         "Général": [
-            ("Euronews FR", "https://fr.euronews.com/rss?level=theme&name=news"),
-            ("The Guardian Europe", "https://www.theguardian.com/world/europe-news/rss"),
-            ("Courrier International", "https://www.courrierinternational.com/feed/all/rss.xml"),
-        ],
-        "Politique": [("Politico Europe", "https://www.politico.eu/feed/")],
-    },
-    "🌍 Monde": {
-        "Général": [
-            ("The Guardian World", "https://www.theguardian.com/world/rss"),
-            ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
-            ("Reuters", "https://feeds.reuters.com/reuters/topNews"),
-            ("Le Monde Diplo", "https://www.monde-diplomatique.fr/recents.atom"),
-        ],
-    },
-    "🌍 Afrique": {
-        "Général": [
-            ("RFI Afrique", "https://www.rfi.fr/fr/afrique/rss"),
-            ("Jeune Afrique", "https://www.jeuneafrique.com/feed/"),
-            ("Le Monde Afrique", "https://www.lemonde.fr/afrique/rss_full.xml"),
-        ],
-    },
-    "🌎 Amériques": {
-        "Général": [
-            ("New York Times", "https://rss.nytimes.com/services/xml/rss/nyt/World.xml"),
-            ("The Guardian US", "https://www.theguardian.com/us-news/rss"),
-        ],
-    },
-    "🌏 Asie & M.-Orient": {
-        "Général": [
-            ("BBC Asia", "https://feeds.bbci.co.uk/news/world/asia/rss.xml"),
-            ("Al Jazeera ME", "https://www.aljazeera.com/xml/rss/all.xml"),
+            ("Euronews FR",         "https://fr.euronews.com/rss?level=theme&name=news"),
+            ("Politico Europe",     "https://www.politico.eu/feed/"),
         ],
     }
 }
 
 TABS_CONFIG = {
-    "🗞️ À la une": {"regions": ["🇫🇷 France", "🌍 Monde"], "categories": ["Général"], "color": "#c0392b", "icon": "🗞️", "hint": "Général France et Monde"},
-    "🇫🇷 France": {"regions": ["🇫🇷 France"], "categories": ["Général", "Politique", "Économie"], "color": "#2980b9", "icon": "🇫🇷", "hint": "Focus France"},
-    "🌍 Monde": {"regions": ["🌍 Monde", "🌎 Amériques", "🌏 Asie & M.-Orient"], "categories": ["Général"], "color": "#16a085", "icon": "🌍", "hint": "Focus International"},
-    "⚖️ Politique": {"regions": ["🇫🇷 France", "🇪🇺 Europe"], "categories": ["Politique"], "color": "#8e44ad", "icon": "⚖️", "hint": "Analyse Politique"},
-    "🌱 Environnement": {"regions": ["🇫🇷 France", "🌍 Monde"], "categories": ["Environnement"], "color": "#27ae60", "icon": "🌱", "hint": "Écologie et Climat"},
+    "🗞️ À la une": {"regions": ["🇫🇷 France", "🌍 Monde"], "categories": ["Général"], "color": "#c0392b", "icon": "🗞️", "hint": "Tour d'horizon général France et Monde."},
+    "🇫🇷 France": {"regions": ["🇫🇷 France"], "categories": ["Général", "Politique", "Économie"], "color": "#2980b9", "icon": "🇫🇷", "hint": "Actualité française détaillée."},
+    "🌍 Monde": {"regions": ["🌍 Monde"], "categories": ["Général"], "color": "#16a085", "icon": "🌍", "hint": "Panorama international complet."},
+    "⚖️ Politique": {"regions": ["🇫🇷 France", "🇪🇺 Europe"], "categories": ["Politique"], "color": "#8e44ad", "icon": "⚖️", "hint": "Analyse politique approfondie."},
+    "🌱 Environnement": {"regions": ["🇫🇷 France", "🌍 Monde"], "categories": ["Environnement"], "color": "#27ae60", "icon": "🌱", "hint": "Enjeux écologiques et climat."},
 }
 
-GROQ_MODEL = "llama-3.3-70b-versatile"
-HOURS_BACK = 24
-MAX_ARTICLES = 45 # Légèrement réduit pour éviter l'erreur API
+GROQ_MODEL   = "llama-3.3-70b-versatile"
+HOURS_BACK   = 24
+MAX_ARTICLES = 50 
 
 # ═══════════════════════════════════════════════════════
-#  2. CSS — DESIGN MAGAZINE RESPONSIVE
+#  2. CSS — DESIGN MAGAZINE v2.0 (Restauré et Adapté)
 # ═══════════════════════════════════════════════════════
 
 def inject_css(accent: str = "#c0392b"):
     st.markdown(f"""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
 
     :root {{
-        --accent: {accent};
-        --bg: #0f0f11;
-        --bg2: #17171a;
-        --bg3: #1e1e23;
-        --border: #2a2a32;
-        --text: #e8e8ee;
-        --text-muted: #888898;
-        --radius: 12px;
+        --accent:      {accent};
+        --accent-dark: color-mix(in srgb, {accent} 70%, black);
+        --bg:          #0f0f11;
+        --bg2:         #17171a;
+        --bg3:         #1e1e23;
+        --border:      #2a2a32;
+        --text:        #e8e8ee;
+        --text-muted:  #888898;
+        --radius:      12px;
     }}
 
-    /* Global */
     html, body, [data-testid="stAppViewContainer"] {{
         background: var(--bg) !important;
         color: var(--text) !important;
         font-family: 'DM Sans', sans-serif !important;
     }}
-    .block-container {{ padding-top: 1rem !important; max-width: 900px; }}
+
+    .block-container {{ padding-top: 1rem !important; max-width: 850px; }}
 
     /* Masthead */
-    .masthead {{ text-align: center; padding: 2rem 0; border-bottom: 2px solid var(--border); margin-bottom: 1.5rem; }}
-    .masthead-title {{ font-family: 'DM Serif Display', serif; font-size: clamp(2.2rem, 8vw, 3.8rem); line-height: 1; }}
+    .masthead {{ text-align: center; padding: 2rem 0 1rem; border-bottom: 2px solid var(--border); margin-bottom: 1.5rem; }}
+    .masthead-title {{ font-family: 'DM Serif Display', serif; font-size: clamp(2.2rem, 7vw, 3.8rem); letter-spacing: -1px; line-height: 1; margin: 0; }}
     .masthead-title span {{ color: var(--accent); }}
-    .masthead-date {{ font-size: 0.75rem; color: var(--text-muted); letter-spacing: 3px; text-transform: uppercase; margin-top: 0.5rem; }}
+    .masthead-date {{ font-size: 0.78rem; color: var(--text-muted); letter-spacing: 3px; text-transform: uppercase; margin-top: 0.5rem; }}
 
-    /* Résumé Card */
+    /* Summary Card (Magazine Style) */
     .summary-card {{
         background: var(--bg3);
         border: 1px solid var(--border);
@@ -138,20 +119,29 @@ def inject_css(accent: str = "#c0392b"):
         margin: 1.5rem 0;
         box-shadow: 0 10px 30px rgba(0,0,0,0.3);
     }}
-    .summary-card h2 {{ font-family: 'DM Serif Display', serif; font-size: 1.8rem; margin-top: 2rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }}
-    
-    /* Onglets */
-    [data-testid="stTabs"] [role="tab"] {{ font-size: 0.85rem !important; font-weight: 600 !important; }}
-    [data-testid="stTabs"] [role="tab"][aria-selected="true"] {{ border-top: 2px solid var(--accent) !important; }}
+    .summary-card h2 {{ font-family: 'DM Serif Display', serif; font-size: 1.8rem; color: var(--text); margin-top: 1.8rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }}
 
-    /* Chat Section */
-    .chat-section {{ margin-top: 3rem; padding: 1.5rem; background: var(--bg2); border-radius: var(--radius); border: 1px solid var(--border); }}
-    
-    /* Responsive Mobile */
+    /* Chat Styling */
+    [data-testid="stChatMessage"] {{
+        background: var(--bg2) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: var(--radius) !important;
+    }}
+    .stChatInputContainer {{ padding-bottom: 20px; }}
+
+    /* Buttons */
+    .stButton > button {{
+        width: 100% !important;
+        background: var(--accent) !important;
+        color: white !important;
+        border-radius: var(--radius) !important;
+        padding: 0.8rem !important;
+        font-weight: 600 !important;
+    }}
+
     @media (max-width: 768px) {{
         .summary-card {{ padding: 1.2rem; font-size: 0.98rem; }}
         .masthead-title {{ font-size: 2.4rem; }}
-        .block-container {{ padding: 0.5rem !important; }}
     }}
 
     #MainMenu, footer, [data-testid="stToolbar"] {{ visibility: hidden; }}
@@ -187,21 +177,14 @@ def fetch_articles(feed_urls: tuple) -> list[dict]:
     return articles
 
 def generate_ai_response(messages, max_tokens=2500):
-    if "GROQ_API_KEY" not in st.secrets:
-        st.error("Clé API manquante dans les secrets.")
-        return "Erreur : Clé API non configurée."
-    
-    try:
-        client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-        response = client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=0.4
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        return f"Désolé, une erreur API est survenue. Vérifiez vos quotas ou la taille du texte. (Détails: {str(e)[:100]})"
+    client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+    response = client.chat.completions.create(
+        model=GROQ_MODEL,
+        messages=messages,
+        max_tokens=max_tokens,
+        temperature=0.4
+    )
+    return response.choices[0].message.content.strip()
 
 def generate_audio(text: str) -> bytes:
     clean = re.sub(r"[#*_`~>]", "", text)
@@ -215,6 +198,7 @@ def generate_audio(text: str) -> bytes:
     return data
 
 def _md_to_html(text: str) -> str:
+    # Conversion stylée pour le rendu Magazine
     text = re.sub(r"^## (.+)$", r"<h2>\1</h2>", text, flags=re.MULTILINE)
     text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
     return text.replace("\n\n", "<br><br>")
@@ -224,18 +208,19 @@ def _md_to_html(text: str) -> str:
 # ═══════════════════════════════════════════════════════
 
 def main():
-    st.set_page_config(page_title="Matinale Indé", page_icon="🗞️", layout="centered")
+    st.set_page_config(page_title="Ma Matinale Indé", page_icon="🗞️", layout="centered")
     
-    if "summary" not in st.session_state: st.session_state.summary = None
+    # Initialisation des états pour le Chat
+    if "summary_data" not in st.session_state: st.session_state.summary_data = {}
     if "chat_history" not in st.session_state: st.session_state.chat_history = []
-    
-    # Header Date
-    today = datetime.date.today()
-    date_str = today.strftime("%A %d %B %Y").upper()
 
     inject_css()
 
-    # Masthead
+    # Masthead Date
+    today = datetime.date.today()
+    date_str = today.strftime("%A %d %B %Y").upper()
+
+    # Masthead UI
     st.markdown(f"""
     <div class="masthead">
         <h1 class="masthead-title">Ma Matinale <span>Indé</span></h1>
@@ -243,17 +228,27 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
+    # Sidebar
+    with st.sidebar:
+        st.title("🎛️ Filtres")
+        audio_on = st.toggle("🔊 Audio Actif", value=True)
+        if st.button("🗑️ Reset Chat"):
+            st.session_state.chat_history = []
+            st.rerun()
+
     # Onglets
     tab_labels = list(TABS_CONFIG.keys())
     tabs = st.tabs(tab_labels)
 
     for i, tab in enumerate(tabs):
         with tab:
-            cfg = TABS_CONFIG[tab_labels[i]]
-            inject_css(cfg["color"]) # Change la couleur d'accent selon l'onglet
+            tab_name = tab_labels[i]
+            cfg = TABS_CONFIG[tab_name]
+            inject_css(cfg["color"])
             
-            if st.button(f"🗞️ Générer l'édition : {tab_labels[i]}", key=f"btn_{i}"):
-                with st.spinner("📡 Collecte des sources indépendantes..."):
+            # Bouton de génération
+            if st.button(f"🗞️ Générer l'édition : {tab_name}", key=f"btn_{i}"):
+                with st.spinner("📡 Collecte des news..."):
                     feeds = []
                     for r in cfg["regions"]:
                         for c in cfg["categories"]:
@@ -262,47 +257,53 @@ def main():
                     articles = fetch_articles(tuple(feeds))
                 
                 if articles:
-                    with st.spinner("✍️ Rédaction de votre grand format (IA)..."):
-                        sys_prompt = "Tu es rédacteur en chef d'un grand journal. Produis une édition détaillée, longue (800-1000 mots), avec des paragraphes riches. Utilise des ## Titres pour les sections."
-                        user_prompt = f"Fais un grand journal basé sur ces articles ({cfg['hint']}) : " + str(articles[:MAX_ARTICLES])
-                        
-                        st.session_state.summary = generate_ai_response([
-                            {"role": "system", "content": sys_prompt},
-                            {"role": "user", "content": user_prompt}
+                    with st.spinner("🤖 Rédaction de votre journal détaillé..."):
+                        prompt = f"Rédige un journal détaillé de 1000 mots sur : {cfg['hint']}. Structure-le avec ## Titres. Sources : " + str(articles[:MAX_ARTICLES])
+                        summary = generate_ai_response([
+                            {"role": "system", "content": "Tu es un rédacteur en chef indépendant. Produis un contenu riche, analytique et long."},
+                            {"role": "user", "content": prompt}
                         ])
-                        st.session_state.chat_history = [] # Reset chat
+                        # On stocke par onglet pour ne pas tout perdre en changeant
+                        st.session_state.summary_data[tab_name] = summary
+                        st.session_state.chat_history = [] # On vide le chat car le sujet change
                 else:
-                    st.warning("Aucun article récent trouvé pour cette section.")
+                    st.warning("Aucune information trouvée pour cette catégorie aujourd'hui.")
 
-            # Affichage du contenu
-            if st.session_state.summary:
-                # Audio
-                with st.expander("🔊 Écouter la matinale"):
-                    audio_data = generate_audio(st.session_state.summary)
-                    st.audio(audio_data)
+            # Affichage du résumé stocké
+            current_summary = st.session_state.summary_data.get(tab_name)
+            
+            if current_summary:
+                # Lecteur Audio
+                if audio_on:
+                    with st.expander("🔊 Écouter cette édition"):
+                        st.audio(generate_audio(current_summary))
 
-                # Article
-                st.markdown(f'<div class="summary-card">{_md_to_html(st.session_state.summary)}</div>', unsafe_allow_html=True)
+                # Rendu Magazine
+                st.markdown(f'<div class="summary-card">{_md_to_html(current_summary)}</div>', unsafe_allow_html=True)
 
-                # --- CHAT INTERACTIF ---
-                st.markdown('<div class="chat-section">', unsafe_allow_html=True)
+                # --- BOX DE DISCUSSION ---
+                st.markdown("---")
                 st.subheader("💬 Approfondir un sujet")
                 
+                # Historique
                 for msg in st.session_state.chat_history:
                     with st.chat_message(msg["role"]):
                         st.write(msg["content"])
 
-                if q := st.chat_input("Une question sur ces news ?"):
+                # Input
+                if q := st.chat_input("Posez une question sur ces actualités..."):
                     st.session_state.chat_history.append({"role": "user", "content": q})
                     with st.chat_message("user"): st.write(q)
 
                     with st.chat_message("assistant"):
-                        context = [{"role": "system", "content": f"Tu es un journaliste expert. Réponds en te basant sur ce journal : {st.session_state.summary}"}]
-                        context.extend(st.session_state.chat_history)
-                        ans = generate_ai_response(context, max_tokens=800)
-                        st.write(ans)
-                        st.session_state.chat_history.append({"role": "assistant", "content": ans})
-                st.markdown('</div>', unsafe_allow_html=True)
+                        with st.spinner("Analyse des détails..."):
+                            context = [
+                                {"role": "system", "content": f"Tu es un expert. Utilise ce journal comme base : {current_summary}"},
+                                *st.session_state.chat_history
+                            ]
+                            ans = generate_ai_response(context, max_tokens=1000)
+                            st.write(ans)
+                            st.session_state.chat_history.append({"role": "assistant", "content": ans})
 
 if __name__ == "__main__":
     main()
