@@ -1,8 +1,8 @@
 """
 ╔══════════════════════════════════════════════════════╗
-║          MA MATINALE INDÉ  —  v2.8                   ║
+║          MA MATINALE INDÉ  —  v2.9                   ║
 ║  Agrégateur RSS · IA Groq · Chat avec Recherche Web  ║
-║  + Sélecteurs en "Bulles" (Pills) & Sources Étendues ║
+║  + Bulles (Pills) Réparées & Sources Multipliées     ║
 ╚══════════════════════════════════════════════════════╝
 """
 
@@ -77,6 +77,9 @@ RSS_CATALOG = {
             ("Deutsche Welle FR",   "https://rss.dw.com/rdf/rss-fr-all"),
             ("The Independent",     "https://www.independent.co.uk/news/europe/rss"),
             ("Courrier International","https://www.courrierinternational.com/feed/all/rss.xml"),
+            ("RTBF",                "https://rss.rtbf.be/article/rss/rtbf_info_homepage.xml"),
+            ("RTS Info",            "https://www.rts.ch/info/rss/2022.xml"),
+            ("Le Temps",            "https://www.letemps.ch/rss.xml"),
         ],
         "Politique": [
             ("Euractiv FR",         "https://www.euractiv.fr/feed/"),
@@ -96,18 +99,29 @@ RSS_CATALOG = {
     # ── MONDE ───────────────────────────────────────────
     "🌍 Monde": {
         "Général": [
-            ("The Guardian World",  "https://www.theguardian.com/world/rss"),
+            ("Le Monde Diplo",      "https://www.monde-diplomatique.fr/recents.atom"),
+            ("Courrier Inter. Monde","https://www.courrierinternational.com/feed/category/6716/rss.xml"),
+            ("France 24 EN",        "https://www.france24.com/en/rss"),
+            ("RFI Monde",           "https://www.rfi.fr/fr/monde/rss"),
+            ("RTBF Monde",          "https://rss.rtbf.be/article/rss/rtbf_info_monde.xml"),
+            ("RTS Monde",           "https://www.rts.ch/info/monde/rss/"),
+            ("Radio Canada",        "https://ici.radio-canada.ca/rss/4159"),
+            ("Le Point Monde",      "https://www.lepoint.fr/monde/rss.xml"),
+            ("L'Express Monde",     "https://www.lexpress.fr/arc/outboundfeeds/rss/?rubrique=monde"),
             ("BBC World",           "https://feeds.bbci.co.uk/news/world/rss.xml"),
+            ("The Guardian World",  "https://www.theguardian.com/world/rss"),
             ("Reuters",             "https://feeds.reuters.com/reuters/topNews"),
             ("Al Jazeera EN",       "https://www.aljazeera.com/xml/rss/all.xml"),
             ("UN News",             "https://news.un.org/feed/subscribe/fr/news/all/rss.xml"),
-            ("France 24 EN",        "https://www.france24.com/en/rss"),
-            ("Le Monde Diplo",      "https://www.monde-diplomatique.fr/recents.atom"),
+            ("Amnesty Inter.",      "https://www.amnesty.org/en/rss/"),
+            ("Human Rights Watch",  "https://www.hrw.org/rss/news"),
+            ("Der Spiegel Int.",    "https://www.spiegel.de/international/index.rss"),
         ],
         "Politique": [
             ("Politico",            "https://www.politico.com/rss/politicopicks.xml"),
             ("Foreign Affairs",     "https://www.foreignaffairs.com/rss.xml"),
             ("The Atlantic",        "https://www.theatlantic.com/feed/all/"),
+            ("Mediapart Inter.",    "https://www.mediapart.fr/articles/feed/international"),
         ],
         "Économie": [
             ("Financial Times",     "https://www.ft.com/?format=rss"),
@@ -136,6 +150,7 @@ RSS_CATALOG = {
             ("Le Monde Afrique",    "https://www.lemonde.fr/afrique/rss_full.xml"),
             ("Al Jazeera Africa",   "https://www.aljazeera.com/xml/rss/all.xml"),
             ("The Africa Report",   "https://www.theafricareport.com/feed/"),
+            ("AllAfrica",           "https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf"),
         ],
         "Économie": [
             ("Jeune Afrique Éco",   "https://www.jeuneafrique.com/cat/economie-entreprises/feed/"),
@@ -179,6 +194,7 @@ RSS_CATALOG = {
             ("RFI Asie",            "https://www.rfi.fr/fr/asie-pacifique/rss"),
             ("South China Morning", "https://www.scmp.com/rss/91/feed"),
             ("The Diplomat",        "https://thediplomat.com/feed/"),
+            ("Kyodo News",          "https://english.kyodonews.net/rss/news.xml"),
         ],
         "Économie": [
             ("Nikkei Asia",         "https://asia.nikkei.com/rss/feed/nar"),
@@ -348,6 +364,39 @@ def inject_css(accent: str = "#c0392b"):
         border-top: 2px solid var(--accent) !important;
     }}
 
+    /* STYLE DES BULLES (st.pills) POUR QU'ELLES S'AFFICHENT BIEN */
+    [data-testid="stPills"] {{
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.2rem;
+    }}
+    [data-testid="stPill"] {{
+        background-color: var(--bg3) !important;
+        border: 1px solid var(--border) !important;
+        color: var(--text-muted) !important;
+        border-radius: 20px !important;
+        padding: 0.2rem 0.8rem !important;
+        font-size: 0.85rem !important;
+        transition: all 0.2s;
+    }}
+    [data-testid="stPill"]:hover {{
+        border-color: var(--text-muted) !important;
+    }}
+    [data-testid="stPill"][aria-selected="true"] {{
+        background-color: color-mix(in srgb, var(--accent) 15%, transparent) !important;
+        border-color: var(--accent) !important;
+        color: var(--text) !important;
+        font-weight: 600 !important;
+    }}
+
+    /* Filtres et MultiSelect UI (au cas où Streamlit est vieux) */
+    .stMultiSelect > div > div {{
+        background: var(--bg3) !important;
+        border: 1px solid var(--border) !important;
+        color: var(--text) !important;
+        border-radius: var(--radius) !important;
+    }}
+
     /* Bouton principal */
     .stButton > button {{
         width: 100% !important;
@@ -437,7 +486,7 @@ def inject_css(accent: str = "#c0392b"):
 
 
 # ═══════════════════════════════════════════════════════
-#  3. PARSING RSS
+#  3. PARSING RSS (Modifié pour la diversité des sources)
 # ═══════════════════════════════════════════════════════
 
 def strip_html(text: str) -> str:
@@ -590,7 +639,7 @@ def generate_audio(text: str) -> bytes:
 
 
 # ═══════════════════════════════════════════════════════
-#  6. RENDU D'UN ONGLET
+#  6. RENDU D'UN ONGLET (Avec Sélecteur de Région)
 # ═══════════════════════════════════════════════════════
 
 def render_tab(tab_name: str, tab_cfg: dict, extra_cats: list, audio_enabled: bool):
@@ -600,7 +649,6 @@ def render_tab(tab_name: str, tab_cfg: dict, extra_cats: list, audio_enabled: bo
     # ── SÉLECTION DES RÉGIONS EN "BULLES" (PILLS) ──
     st.markdown(f"##### 🌍 Ciblez votre veille")
     
-    # Utilisation de st.pills (Bulles) si disponible, sinon repli sur st.multiselect
     try:
         selected_regions = st.pills(
             f"Zones pour {tab_name.split(' ', 1)[-1]}",
@@ -610,11 +658,12 @@ def render_tab(tab_name: str, tab_cfg: dict, extra_cats: list, audio_enabled: bo
             key=f"reg_select_{tab_name}",
             label_visibility="collapsed"
         )
-        if selected_regions is None:
+        if not selected_regions: # Si l'utilisateur décoche tout, on évite le crash
             selected_regions = []
     except AttributeError:
+        # Repli si la version de Streamlit n'est finalement pas à jour
         selected_regions = st.multiselect(
-            f"Zones pour {tab_name.split(' ', 1)[-1]} (Mettez à jour Streamlit >= 1.40 pour avoir les bulles)",
+            f"Zones pour {tab_name.split(' ', 1)[-1]}",
             options=list(RSS_CATALOG.keys()),
             default=tab_cfg["regions_default"],
             key=f"reg_select_{tab_name}",
@@ -631,7 +680,7 @@ def render_tab(tab_name: str, tab_cfg: dict, extra_cats: list, audio_enabled: bo
     feeds = get_feeds_for_tab(selected_regions, tab_cfg["categories"], extra_cats)
     
     if not feeds:
-        st.warning("Aucune source disponible pour ces régions et catégories.")
+        st.warning("Aucune source disponible pour ces régions et catégories. Veuillez sélectionner une zone géographique.")
         return
 
     # Mémoire de l'onglet
@@ -645,14 +694,14 @@ def render_tab(tab_name: str, tab_cfg: dict, extra_cats: list, audio_enabled: bo
             articles = fetch_articles(tuple(feeds))
 
         if not articles:
-            st.error("⚠️ Aucun article récupéré.")
+            st.error("⚠️ Aucun article récent récupéré pour ces zones.")
             return
 
         with st.spinner("🤖 Rédaction par Llama 3.3…"):
             try:
                 summary = generate_summary(articles, tab_cfg["prompt_hint"])
                 tab_state["summary"] = summary
-                tab_state["articles"] = articles[:MAX_ARTICLES] # Sauvegarde de la sélection finale
+                tab_state["articles"] = articles[:MAX_ARTICLES] 
                 tab_state["chat"] = [] 
                 st.rerun()
             except Exception as e:
@@ -668,8 +717,8 @@ def render_tab(tab_name: str, tab_cfg: dict, extra_cats: list, audio_enabled: bo
 
         st.markdown(f"""
         <div class="meta-bar" style="margin-top:1rem">
-            <span class="meta-chip accent">✅ {len(articles)} articles utilisés</span>
-            <span class="meta-chip">📰 {unique_sources} journaux différents</span>
+            <span class="meta-chip accent">✅ {len(articles)} articles croisés</span>
+            <span class="meta-chip">📰 {unique_sources} médias différents</span>
             <span class="meta-chip">🤖 {GROQ_MODEL}</span>
         </div>
         """, unsafe_allow_html=True)
@@ -684,7 +733,7 @@ def render_tab(tab_name: str, tab_cfg: dict, extra_cats: list, audio_enabled: bo
 
         st.markdown(f'<div class="summary-card">{_md_to_html(summary)}</div>', unsafe_allow_html=True)
 
-        with st.expander(f"📋 {unique_sources} Sources et {len(articles)} articles croisés — cliquer pour voir"):
+        with st.expander(f"📋 Sources détaillées ({unique_sources} médias) — cliquer pour voir"):
             for art in articles[:MAX_DISPLAY]:
                 link_md = f"[{art['title']}]({art['link']})" if art["link"] else art["title"]
                 st.markdown(f"<span class='src-badge'>{art['source']}</span> {link_md}", unsafe_allow_html=True)
@@ -779,13 +828,13 @@ def main():
 
         all_cats = sorted({cat for region in RSS_CATALOG.values() for cat in region})
         
-        # Utilisation de st.pills (Bulles) si disponible pour la Sidebar aussi
         try:
             extra_cats = st.pills(
                 "Thématiques globales supplémentaires",
                 options=all_cats,
                 default=[],
-                selection_mode="multi"
+                selection_mode="multi",
+                label_visibility="visible"
             )
             if extra_cats is None: extra_cats = []
         except AttributeError:
@@ -793,7 +842,6 @@ def main():
                 "Thématiques globales supplémentaires",
                 options=all_cats,
                 default=[],
-                help="S'ajoutera à toutes vos éditions",
             )
 
         st.markdown("---")
