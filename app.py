@@ -45,7 +45,6 @@ RSS_CATALOG = {
         ],
         "Politique": [
             ("L'Humanité",          "https://www.humanite.fr/feed"),
-            ("Marianne",            "https://www.marianne.net/feed"),
             ("Politis",             "https://www.politis.fr/feed/"),
             ("Le Monde Politique",  "https://www.lemonde.fr/politique/rss_full.xml"),
             ("Mediapart",           "https://www.mediapart.fr/articles/feed"),
